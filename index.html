@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -65,6 +64,9 @@
       }
     </style>
 
+    <!-- Babel para traducir JSX en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <!-- Import Map for Modules -->
     <script type="importmap">
 {
@@ -81,7 +83,8 @@
 <body class="text-white overflow-hidden select-none">
     <div id="root" class="h-screen w-screen flex flex-col"></div>
 
-    <script type="module">
+    <!-- NOTA: data-type="module" es importante para Babel + Imports -->
+    <script type="text/babel" data-type="module">
         import React, { useState, useEffect } from 'react';
         import ReactDOM from 'react-dom/client';
         import { 
@@ -130,12 +133,16 @@
                 }
             };
 
-            return React.createElement('button', {
-                onClick: onClick,
-                className: `${getBaseStyles()} ${className}`,
-                disabled: disabled,
-                type: "button"
-            }, label);
+            return (
+                <button
+                    onClick={onClick}
+                    className={`${getBaseStyles()} ${className}`}
+                    disabled={disabled}
+                    type="button"
+                >
+                    {label}
+                </button>
+            );
         };
 
         // Sidebar Component (History/Memory)
@@ -193,7 +200,6 @@
             const API_URL = 'https://open.er-api.com/v6/latest/USD';
             
             // CALIBRACIÓN DE TASAS
-            // Objetivo: Banreservas Venta ~63.90
             const BANK_SPREADS = {
                 [Bank.POPULAR]: 1.062, 
                 [Bank.RESERVAS]: 1.055, 
