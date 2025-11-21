@@ -6,6 +6,9 @@
     <title>Calculadora Windows 11</title>
     <meta name="description" content="Calculadora estilo Windows 11 con conversor de divisas (DOP/USD/EUR)">
     
+    <!-- Favicon: Calculadora Naranja -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23f97316'/><text x='50' y='70' font-size='70' text-anchor='middle' fill='white'>=</text><text x='50' y='45' font-size='30' text-anchor='middle' fill='white'>🧮</text></svg>" />
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -199,10 +202,13 @@
         const CurrencyConverter = () => {
             const API_URL = 'https://open.er-api.com/v6/latest/USD';
             
-            // CALIBRACIÓN DE TASAS
+            // CALIBRACIÓN DE TASAS (ACTUALIZADA)
+            // Objetivo: Banreservas ~63.90, Popular ~64.10
+            // Asumiendo que la API devuelve ~61.5 (tasa mercado)
+            // Reducimos el spread para evitar el salto a 67.xx
             const BANK_SPREADS = {
-                [Bank.POPULAR]: 1.062, 
-                [Bank.RESERVAS]: 1.055, 
+                [Bank.POPULAR]: 1.042,  
+                [Bank.RESERVAS]: 1.038, // Ajuste más conservador para acercarse a 63.90
             };
 
             const CURRENCY_META = {
