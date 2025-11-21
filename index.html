@@ -1,0 +1,591 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Calculadora Windows 11</title>
+    <meta name="description" content="Calculadora estilo Windows 11 con conversor de divisas (DOP/USD/EUR)">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              win: {
+                bg: '#202020',
+                card: '#2c2c2c',
+                btn: '#323232',
+                'btn-hover': '#3b3b3b',
+                'btn-active': '#2d2d2d',
+                accent: '#76b9ed',
+                'accent-hover': '#69a6d6',
+                text: '#ffffff',
+                'text-muted': '#a0a0a0',
+              }
+            },
+            fontFamily: {
+              sans: ['"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+            },
+            animation: {
+                'fade-in': 'fadeIn 0.2s ease-out',
+            },
+            keyframes: {
+                fadeIn: {
+                    '0%': { opacity: '0', transform: 'scale(0.99)' },
+                    '100%': { opacity: '1', transform: 'scale(1)' },
+                }
+            }
+          }
+        }
+      }
+    </script>
+
+    <!-- Styles -->
+    <style>
+      body { 
+        touch-action: manipulation; 
+        background-color: #202020;
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #777; }
+      
+      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+      
+      /* Remove Arrows from Number Input */
+      input[type=number]::-webkit-inner-spin-button, 
+      input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; 
+        margin: 0; 
+      }
+    </style>
+
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+</head>
+<body class="text-white overflow-hidden select-none">
+    <div id="root" class="h-screen w-screen flex flex-col"></div>
+
+    <script type="module">
+        import React, { useState, useEffect } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { 
+            History, Delete, Divide, X, Minus, Plus, Equal, 
+            MonitorSmartphone, Trash2, RefreshCcw, ChevronDown, ArrowRightLeft 
+        } from 'lucide-react';
+
+        // --- 1. TYPES & CONSTANTS ---
+        const MAX_DIGITS = 16;
+        
+        const CalculatorMode = {
+            STANDARD: 'Estándar',
+            CURRENCY: 'Divisa'
+        };
+
+        const CalculatorAction = {
+            ADD: '+', SUBTRACT: '-', MULTIPLY: '×', DIVIDE: '÷',
+            EQUALS: '=', CLEAR: 'C', CLEAR_ENTRY: 'CE', BACKSPACE: 'backspace',
+            PERCENT: '%', INVERSE: '1/x', SQUARE: 'sqr', SQRT: 'sqrt',
+            NEGATE: '+/-', DECIMAL: '.'
+        };
+
+        const Tab = { HISTORY: 'Historial', MEMORY: 'Memoria' };
+        
+        const Bank = {
+            POPULAR: 'Banco Popular Dominicano',
+            RESERVAS: 'Banreservas'
+        };
+
+        const CurrencyCode = { DOP: 'DOP', USD: 'USD', EUR: 'EUR' };
+
+        // --- 2. COMPONENTS ---
+
+        // Button Component
+        const Button = ({ label, onClick, variant = 'number', className = '', disabled = false }) => {
+            const getBaseStyles = () => {
+                const base = "flex items-center justify-center rounded-lg transition-all duration-100 active:scale-[0.96] select-none text-lg sm:text-xl font-medium outline-none";
+                if (disabled) return `${base} opacity-40 cursor-not-allowed`;
+                
+                switch (variant) {
+                    case 'accent': return `${base} bg-win-accent text-[#1a1a1a] hover:brightness-110 active:brightness-90 font-semibold`;
+                    case 'number': return `${base} bg-win-btn text-white hover:bg-win-btn-hover active:bg-win-btn/80`;
+                    case 'action':
+                    case 'operator':
+                    default: return `${base} bg-[#2c2c2c] text-white/90 hover:bg-[#353535] active:bg-[#2c2c2c] text-base sm:text-lg`;
+                }
+            };
+
+            return React.createElement('button', {
+                onClick: onClick,
+                className: `${getBaseStyles()} ${className}`,
+                disabled: disabled,
+                type: "button"
+            }, label);
+        };
+
+        // Sidebar Component (History/Memory)
+        const Sidebar = ({ activeTab, setActiveTab, history, memory, onClearHistory, onClearMemory, onHistorySelect, onMemoryClearItem, onMemoryAdd, onMemorySubtract }) => {
+            return (
+                <div className="flex flex-col h-full bg-win-bg border-l border-[#2c2c2c] min-w-[280px] sm:w-[320px]">
+                    <div className="flex px-4 pt-4 pb-2 space-x-4">
+                        <button onClick={() => setActiveTab(Tab.HISTORY)} className={`pb-1 font-semibold text-sm border-b-2 transition-colors ${activeTab === Tab.HISTORY ? 'text-white border-win-accent' : 'text-win-text-muted border-transparent hover:text-white'}`}>Historial</button>
+                        <button onClick={() => setActiveTab(Tab.MEMORY)} className={`pb-1 font-semibold text-sm border-b-2 transition-colors ${activeTab === Tab.MEMORY ? 'text-white border-win-accent' : 'text-win-text-muted border-transparent hover:text-white'}`}>Memoria</button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                        {activeTab === Tab.HISTORY ? (
+                            history.length === 0 ? 
+                            <div className="text-win-text-muted text-sm mt-4 font-medium">Aún no hay historial.</div> :
+                            <div className="flex flex-col space-y-4">
+                                {history.map((item) => (
+                                    <div key={item.id} onClick={() => onHistorySelect(item.result)} className="group flex flex-col items-end p-2 -mr-2 rounded hover:bg-[#2c2c2c] cursor-pointer transition-colors">
+                                        <span className="text-win-text-muted text-xs mb-1 break-all text-right">{item.expression}</span>
+                                        <span className="text-xl font-semibold text-white break-all">{item.result}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            memory.length === 0 ?
+                            <div className="text-win-text-muted text-sm mt-4 font-medium">No hay nada guardado en memoria.</div> :
+                            <div className="flex flex-col space-y-4">
+                                {memory.map((item) => (
+                                    <div key={item.id} className="group flex flex-col p-2 rounded hover:bg-[#2c2c2c] transition-colors relative">
+                                        <span className="text-2xl font-semibold text-white text-right mb-2">{item.value}</span>
+                                        <div className="flex justify-end space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => onMemoryClearItem(item.id)} className="p-1.5 hover:bg-[#3b3b3b] rounded text-xs">MC</button>
+                                            <button onClick={() => onMemoryAdd(item.id)} className="p-1.5 hover:bg-[#3b3b3b] rounded text-xs">M+</button>
+                                            <button onClick={() => onMemorySubtract(item.id)} className="p-1.5 hover:bg-[#3b3b3b] rounded text-xs">M-</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 flex justify-end">
+                        {((activeTab === Tab.HISTORY && history.length > 0) || (activeTab === Tab.MEMORY && memory.length > 0)) && (
+                            <button onClick={activeTab === Tab.HISTORY ? onClearHistory : onClearMemory} className="p-2 rounded hover:bg-[#2c2c2c] text-win-text-muted hover:text-white transition-colors">
+                                <Trash2 size={18} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Currency Converter Component
+        const CurrencyConverter = () => {
+            const API_URL = 'https://open.er-api.com/v6/latest/USD';
+            
+            // CALIBRACIÓN DE TASAS
+            // Objetivo: Banreservas Venta ~63.90
+            const BANK_SPREADS = {
+                [Bank.POPULAR]: 1.062, 
+                [Bank.RESERVAS]: 1.055, 
+            };
+
+            const CURRENCY_META = {
+                [CurrencyCode.USD]: { symbol: '$', flag: '🇺🇸', name: 'USD' },
+                [CurrencyCode.EUR]: { symbol: '€', flag: '🇪🇺', name: 'EUR' },
+                [CurrencyCode.DOP]: { symbol: 'RD$', flag: '🇩🇴', name: 'DOP' }
+            };
+
+            const [activeCurrency, setActiveCurrency] = useState(CurrencyCode.USD);
+            const [inputValue, setInputValue] = useState('1');
+            const [selectedBank, setSelectedBank] = useState(Bank.RESERVAS);
+            const [rates, setRates] = useState(null);
+            
+            useEffect(() => {
+                const fetchRates = async () => {
+                    try {
+                        const res = await fetch(API_URL);
+                        const data = await res.json();
+                        if(data.result === 'success') setRates(data.rates);
+                    } catch(e) { console.error("Error fetching rates", e); }
+                };
+                fetchRates();
+            }, []);
+
+            const getRate = (code) => {
+                if (!rates) return 1;
+                let rate = rates[code];
+                if (code === CurrencyCode.DOP) {
+                    const spread = BANK_SPREADS[selectedBank] || 1.0;
+                    rate = rate * spread;
+                }
+                return rate;
+            };
+
+            const getDisplayValues = () => {
+                const values = { [CurrencyCode.USD]: '0', [CurrencyCode.EUR]: '0', [CurrencyCode.DOP]: '0' };
+                if (!rates) return values;
+                const amount = parseFloat(inputValue);
+                if (isNaN(amount)) return values;
+
+                const activeRate = getRate(activeCurrency);
+                const amountInUSD = amount / activeRate;
+
+                [CurrencyCode.USD, CurrencyCode.EUR, CurrencyCode.DOP].forEach(code => {
+                    if (code === activeCurrency) values[code] = inputValue;
+                    else {
+                        const val = amountInUSD * getRate(code);
+                        values[code] = val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    }
+                });
+                return values;
+            };
+
+            const displayValues = getDisplayValues();
+            const usdToDopRate = rates ? (getRate(CurrencyCode.DOP) / getRate(CurrencyCode.USD)).toFixed(2) : '...';
+
+            // Manejo del teclado numérico
+            const handleNumber = (n) => {
+                if (inputValue.length >= 12) return;
+                if (inputValue === '0') setInputValue(n);
+                else setInputValue(inputValue + n);
+            };
+            const handleBackspace = () => {
+                if (inputValue.length === 1) setInputValue('0');
+                else setInputValue(inputValue.slice(0, -1));
+            };
+            const handleClear = () => setInputValue('0');
+            const handleDecimal = () => {
+                if (!inputValue.includes('.')) setInputValue(inputValue + '.');
+            };
+
+            const switchActive = (code) => {
+                const val = displayValues[code].replace(/,/g, '');
+                setInputValue(val);
+                setActiveCurrency(code);
+            };
+
+            return (
+                <div className="flex flex-col h-full w-full font-sans bg-[#202020]">
+                    <div className="px-6 py-4 shrink-0 border-b border-[#2c2c2c]">
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="relative w-full sm:w-auto min-w-[240px]">
+                                <select 
+                                    value={selectedBank} 
+                                    onChange={(e) => setSelectedBank(e.target.value)}
+                                    className="w-full appearance-none bg-[#2c2c2c] text-white text-sm font-medium py-2 pl-4 pr-10 rounded border border-transparent hover:border-[#3b3b3b] focus:border-win-accent outline-none cursor-pointer transition-all"
+                                >
+                                    {Object.values(Bank).map(b => <option key={b} value={b}>{b}</option>)}
+                                </select>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-win-text-muted">
+                                    <ChevronDown size={14} />
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 bg-[#2c2c2c] px-3 py-1.5 rounded text-xs sm:text-sm shadow-sm border border-white/5">
+                                <ArrowRightLeft size={14} className="text-win-accent" />
+                                <span className="text-win-text-muted">Tasa Venta:</span>
+                                <span className="font-bold text-white">1 USD ≈ {usdToDopRate} DOP</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Grid de 3 Columnas */}
+                    <div className="flex-1 p-4 overflow-y-auto">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 h-full content-start sm:content-center">
+                            {[CurrencyCode.USD, CurrencyCode.EUR, CurrencyCode.DOP].map((code) => {
+                                const isActive = activeCurrency === code;
+                                const meta = CURRENCY_META[code];
+                                return (
+                                    <button key={code} onClick={() => switchActive(code)} className={`relative flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 ${isActive ? 'bg-[#2c2c2c] border-win-accent shadow-[0_0_15px_rgba(118,185,237,0.1)] scale-[1.02]' : 'bg-transparent border-[#3b3b3b] hover:bg-[#282828] hover:border-[#4a4a4a]'}`}>
+                                        <div className="text-center mb-3">
+                                            <span className="text-4xl mb-2 block">{meta.flag}</span>
+                                            <span className={`text-sm font-bold tracking-wider uppercase ${isActive ? 'text-win-accent' : 'text-win-text-muted'}`}>{meta.name}</span>
+                                        </div>
+                                        <div className={`text-2xl sm:text-3xl font-semibold break-all text-center ${isActive ? 'text-white' : 'text-white/80'}`}>{meta.symbol} {displayValues[code]}</div>
+                                        {isActive && <span className="absolute top-3 right-3 w-2 h-2 bg-win-accent rounded-full animate-pulse"></span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Teclado Numérico */}
+                    <div className="p-1 bg-[#1e1e1e] border-t border-[#333]">
+                        <div className="grid grid-cols-4 gap-1 max-w-2xl mx-auto h-[220px]">
+                            <Button label="CE" variant="action" onClick={handleClear} className="text-sm h-auto bg-[#252525]" />
+                            <Button label="C" variant="action" onClick={handleClear} className="text-sm h-auto bg-[#252525]" />
+                            <Button label={<Delete size={20} />} variant="action" onClick={handleBackspace} className="text-sm h-auto bg-[#252525]" />
+                            <Button label="/" variant="operator" disabled className="text-sm h-auto opacity-30" />
+                            
+                            <Button label="7" onClick={() => handleNumber('7')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="8" onClick={() => handleNumber('8')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="9" onClick={() => handleNumber('9')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="×" variant="operator" disabled className="text-sm h-auto opacity-30" />
+                            
+                            <Button label="4" onClick={() => handleNumber('4')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="5" onClick={() => handleNumber('5')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="6" onClick={() => handleNumber('6')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="-" variant="operator" disabled className="text-sm h-auto opacity-30" />
+                            
+                            <Button label="1" onClick={() => handleNumber('1')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="2" onClick={() => handleNumber('2')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="3" onClick={() => handleNumber('3')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="+" variant="operator" disabled className="text-sm h-auto opacity-30" />
+                            
+                            <Button label="" disabled className="opacity-0" />
+                            <Button label="0" onClick={() => handleNumber('0')} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="." onClick={handleDecimal} className="text-xl h-auto bg-[#202020]" />
+                            <Button label="=" variant="accent" disabled className="opacity-50" />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 3. MAIN APP ---
+        const App = () => {
+            const [mode, setMode] = useState(CalculatorMode.STANDARD);
+            const [display, setDisplay] = useState('0');
+            const [expression, setExpression] = useState('');
+            const [prevValue, setPrevValue] = useState(null);
+            const [operator, setOperator] = useState(null);
+            const [waitingForNewValue, setWaitingForNewValue] = useState(false);
+            const [history, setHistory] = useState([]);
+            const [memory, setMemory] = useState([]);
+            const [activeTab, setActiveTab] = useState(Tab.HISTORY);
+            const [showSidebar, setShowSidebar] = useState(false);
+
+            // Lógica Calculadora Estándar
+            const isErrorState = (val) => val === "Cannot divide by zero" || val === "Invalid Input" || val === "NaN";
+
+            const handleNumber = (num) => {
+                if (waitingForNewValue || isErrorState(display)) {
+                    setDisplay(num);
+                    setWaitingForNewValue(false);
+                } else {
+                    display === '0' ? setDisplay(num) : (display.length < MAX_DIGITS && setDisplay(display + num));
+                }
+            };
+
+            const handleDecimal = () => {
+                if (waitingForNewValue || isErrorState(display)) {
+                    setDisplay('0.'); setWaitingForNewValue(false); return;
+                }
+                !display.includes('.') && setDisplay(display + '.');
+            };
+
+            const performCalculation = (left, right, op) => {
+                switch (op) {
+                    case CalculatorAction.ADD: return left + right;
+                    case CalculatorAction.SUBTRACT: return left - right;
+                    case CalculatorAction.MULTIPLY: return left * right;
+                    case CalculatorAction.DIVIDE: if (right === 0) throw new Error("Zero"); return left / right;
+                    default: return right;
+                }
+            };
+
+            const handleOperator = (op) => {
+                if (isErrorState(display)) return;
+                const input = parseFloat(display);
+                if (prevValue === null) {
+                    setPrevValue(input); setExpression(`${input} ${op}`);
+                } else if (operator) {
+                    if (waitingForNewValue) setExpression(`${prevValue} ${op}`);
+                    else {
+                        try {
+                            const res = performCalculation(prevValue, input, operator);
+                            setDisplay(String(res)); setPrevValue(res); setExpression(`${res} ${op}`);
+                        } catch (e) {
+                            setDisplay("Cannot divide by zero"); setPrevValue(null); setOperator(null);
+                        }
+                    }
+                }
+                setWaitingForNewValue(true); setOperator(op);
+            };
+
+            const handleEquals = () => {
+                if (!operator || prevValue === null || isErrorState(display)) return;
+                const input = parseFloat(display);
+                try {
+                    const result = performCalculation(prevValue, input, operator);
+                    let resultString = String(result);
+                    if (resultString.includes('.')) resultString = String(parseFloat(result.toFixed(10)));
+                    
+                    setHistory(prev => [{ id: Date.now().toString(), expression: `${prevValue} ${operator} ${input} =`, result: resultString }, ...prev]);
+                    setDisplay(resultString); setExpression(''); setPrevValue(null); setOperator(null); setWaitingForNewValue(true);
+                } catch (e) {
+                    setDisplay("Cannot divide by zero"); setPrevValue(null); setOperator(null); setWaitingForNewValue(true);
+                }
+            };
+
+            const handleSpecialAction = (action) => {
+                if (isErrorState(display) && action !== CalculatorAction.BACKSPACE && action !== CalculatorAction.CLEAR) return;
+                const current = parseFloat(display);
+                
+                switch (action) {
+                    case CalculatorAction.PERCENT: setDisplay(String(current / 100)); break;
+                    case CalculatorAction.INVERSE: 
+                        if (current === 0) { setDisplay("Cannot divide by zero"); setWaitingForNewValue(true); }
+                        else { setDisplay(String(1 / current)); setExpression(`1/(${current})`); setWaitingForNewValue(true); }
+                        break;
+                    case CalculatorAction.SQUARE: setDisplay(String(current * current)); setExpression(`sqr(${current})`); setWaitingForNewValue(true); break;
+                    case CalculatorAction.SQRT: 
+                        if (current < 0) { setDisplay("Invalid Input"); setWaitingForNewValue(true); }
+                        else { setDisplay(String(Math.sqrt(current))); setExpression(`√(${current})`); setWaitingForNewValue(true); }
+                        break;
+                    case CalculatorAction.NEGATE: setDisplay(String(current * -1)); break;
+                    case CalculatorAction.CLEAR: setDisplay('0'); setExpression(''); setPrevValue(null); setOperator(null); setWaitingForNewValue(false); break;
+                    case CalculatorAction.CLEAR_ENTRY: setDisplay('0'); break;
+                    case CalculatorAction.BACKSPACE: 
+                        if (waitingForNewValue || isErrorState(display)) setDisplay('0');
+                        else setDisplay(display.length === 1 || (display.length === 2 && display.startsWith('-')) ? '0' : display.slice(0, -1));
+                        break;
+                }
+            };
+
+            const handleMemory = (action) => {
+                if (isErrorState(display) && action !== 'MC' && action !== 'MR') return;
+                const current = parseFloat(display);
+                if (isNaN(current) && action !== 'MC' && action !== 'MR') return;
+
+                switch (action) {
+                    case 'MC': setMemory([]); break;
+                    case 'MR': if (memory.length > 0) { setDisplay(String(memory[0].value)); setWaitingForNewValue(true); } break;
+                    case 'M+': memory.length > 0 ? (memory[0].value += current, setMemory([...memory])) : setMemory([{ id: Date.now().toString(), value: current }]); setWaitingForNewValue(true); break;
+                    case 'M-': memory.length > 0 ? (memory[0].value -= current, setMemory([...memory])) : setMemory([{ id: Date.now().toString(), value: -current }]); setWaitingForNewValue(true); break;
+                    case 'MS': setMemory(prev => [{ id: Date.now().toString(), value: current }, ...prev]); setWaitingForNewValue(true); break;
+                }
+            };
+
+            // Handlers de Memoria en Sidebar
+            const memAdd = (id) => setMemory(p => p.map(m => m.id === id ? {...m, value: m.value + parseFloat(display)} : m));
+            const memSub = (id) => setMemory(p => p.map(m => m.id === id ? {...m, value: m.value - parseFloat(display)} : m));
+            const memClear = (id) => setMemory(p => p.filter(m => m.id !== id));
+
+            // Listeners de Teclado
+            useEffect(() => {
+                if (mode !== CalculatorMode.STANDARD) return;
+                const handleKey = (e) => {
+                    const k = e.key;
+                    if (/[0-9]/.test(k)) handleNumber(k);
+                    if (k === '.') handleDecimal();
+                    if (k === '+' || k === '-') handleOperator(k);
+                    if (k === '*') handleOperator(CalculatorAction.MULTIPLY);
+                    if (k === '/') handleOperator(CalculatorAction.DIVIDE);
+                    if (k === 'Enter' || k === '=') { e.preventDefault(); handleEquals(); }
+                    if (k === 'Backspace') handleSpecialAction(CalculatorAction.BACKSPACE);
+                    if (k === 'Escape') handleSpecialAction(CalculatorAction.CLEAR);
+                };
+                window.addEventListener('keydown', handleKey);
+                return () => window.removeEventListener('keydown', handleKey);
+            }, [display, prevValue, operator, waitingForNewValue, mode]);
+
+            return (
+                <div className="flex h-full w-full bg-win-bg select-none text-white overflow-hidden font-sans relative">
+                    <div className="flex flex-col flex-1 h-full min-w-0 relative">
+                        {/* Tabs Superiores */}
+                        <div className="flex items-center justify-center px-4 pt-3 pb-1 shrink-0 z-50">
+                            <div className="flex items-center bg-[#2c2c2c] rounded-xl p-1 gap-1 shadow-md border border-white/5">
+                                <button onClick={() => setMode(CalculatorMode.STANDARD)} className={`px-6 py-1.5 rounded-lg text-sm font-medium transition-all ${mode === CalculatorMode.STANDARD ? 'bg-[#3b3b3b] text-white shadow-sm' : 'text-win-text-muted hover:text-white hover:bg-[#323232]'}`}>Estándar</button>
+                                <div className="w-px h-4 bg-gray-600/50 mx-1"></div>
+                                <button onClick={() => setMode(CalculatorMode.CURRENCY)} className={`px-6 py-1.5 rounded-lg text-sm font-medium transition-all ${mode === CalculatorMode.CURRENCY ? 'bg-[#3b3b3b] text-white shadow-sm' : 'text-win-text-muted hover:text-white hover:bg-[#323232]'}`}>Divisas</button>
+                            </div>
+                            {mode === CalculatorMode.STANDARD && (
+                                <div className="absolute right-4 flex items-center">
+                                    <button className="md:hidden p-2 hover:bg-[#323232] rounded-lg text-win-text-muted hover:text-white" onClick={() => setShowSidebar(!showSidebar)}>
+                                        <History size={20} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Área de Contenido */}
+                        <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
+                            {mode === CalculatorMode.STANDARD ? (
+                                <div className="flex flex-col h-full animate-fade-in">
+                                    <div className="flex flex-col justify-end items-end px-6 pb-2 pt-4 grow-0 shrink-0 min-h-[120px] sm:min-h-[160px]">
+                                        <div className="text-win-text-muted text-sm sm:text-base font-medium h-6 mb-1">{expression}</div>
+                                        <div className={`font-semibold text-white break-all leading-none transition-all ${display.length > 12 ? 'text-4xl sm:text-5xl' : 'text-6xl sm:text-7xl'}`}>{display}</div>
+                                    </div>
+
+                                    {/* Barra de Memoria Rápida */}
+                                    <div className="flex justify-between px-4 mb-2 h-10 shrink-0 gap-1">
+                                        {['MC', 'MR', 'M+', 'M-', 'MS'].map(l => (
+                                            <button key={l} onClick={() => handleMemory(l)} disabled={(l === 'MC' || l === 'MR') && memory.length === 0} className={`flex-1 rounded-md text-xs font-medium transition-all ${((l === 'MC' || l === 'MR') && memory.length === 0) ? 'text-gray-600 cursor-default' : 'text-white hover:bg-[#2c2c2c] active:bg-[#323232]'}`}>{l}</button>
+                                        ))}
+                                    </div>
+
+                                    {/* Teclado Estándar */}
+                                    <div className="grid grid-cols-4 gap-1.5 p-2 pb-4 grow h-full">
+                                        <Button label="%" variant="action" onClick={() => handleSpecialAction(CalculatorAction.PERCENT)} />
+                                        <Button label="CE" variant="action" onClick={() => handleSpecialAction(CalculatorAction.CLEAR_ENTRY)} />
+                                        <Button label="C" variant="action" onClick={() => handleSpecialAction(CalculatorAction.CLEAR)} />
+                                        <Button label={<Delete size={22} strokeWidth={1.5} />} variant="action" onClick={() => handleSpecialAction(CalculatorAction.BACKSPACE)} />
+                                        
+                                        <Button label={<span className="italic font-serif">1/x</span>} variant="action" onClick={() => handleSpecialAction(CalculatorAction.INVERSE)} />
+                                        <Button label={<span className="italic font-serif">x²</span>} variant="action" onClick={() => handleSpecialAction(CalculatorAction.SQUARE)} />
+                                        <Button label={<span className="italic font-serif">√x</span>} variant="action" onClick={() => handleSpecialAction(CalculatorAction.SQRT)} />
+                                        <Button label={<Divide size={22} />} variant="action" onClick={() => handleOperator(CalculatorAction.DIVIDE)} />
+
+                                        <Button label="7" onClick={() => handleNumber('7')} />
+                                        <Button label="8" onClick={() => handleNumber('8')} />
+                                        <Button label="9" onClick={() => handleNumber('9')} />
+                                        <Button label={<X size={22} />} variant="action" onClick={() => handleOperator(CalculatorAction.MULTIPLY)} />
+
+                                        <Button label="4" onClick={() => handleNumber('4')} />
+                                        <Button label="5" onClick={() => handleNumber('5')} />
+                                        <Button label="6" onClick={() => handleNumber('6')} />
+                                        <Button label={<Minus size={22} />} variant="action" onClick={() => handleOperator(CalculatorAction.SUBTRACT)} />
+
+                                        <Button label="1" onClick={() => handleNumber('1')} />
+                                        <Button label="2" onClick={() => handleNumber('2')} />
+                                        <Button label="3" onClick={() => handleNumber('3')} />
+                                        <Button label={<Plus size={22} />} variant="action" onClick={() => handleOperator(CalculatorAction.ADD)} />
+
+                                        <Button label="+/-" onClick={() => handleSpecialAction(CalculatorAction.NEGATE)} />
+                                        <Button label="0" onClick={() => handleNumber('0')} />
+                                        <Button label="." onClick={handleDecimal} />
+                                        <Button label={<Equal size={28} />} variant="accent" onClick={handleEquals} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-full animate-fade-in">
+                                    <CurrencyConverter />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Sidebar para Desktop y Mobile Overlay */}
+                    {mode === CalculatorMode.STANDARD && (
+                        <>
+                            {showSidebar && <div className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowSidebar(false)} />}
+                            <div className={`fixed inset-y-0 right-0 z-50 transform transition-transform duration-300 md:relative md:translate-x-0 md:flex shadow-2xl md:shadow-none ${showSidebar ? 'translate-x-0' : 'translate-x-full'} ${!showSidebar && 'hidden md:flex'}`}>
+                                <Sidebar 
+                                    activeTab={activeTab} setActiveTab={setActiveTab}
+                                    history={history} memory={memory}
+                                    onClearHistory={() => setHistory([])} onClearMemory={() => setMemory([])}
+                                    onHistorySelect={(res) => { setDisplay(res); setWaitingForNewValue(true); setShowSidebar(false); }}
+                                    onMemoryAdd={memAdd} onMemorySubtract={memSub} onMemoryClearItem={memClear}
+                                />
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
