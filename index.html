@@ -200,15 +200,16 @@
 
         // Currency Converter Component
         const CurrencyConverter = () => {
-            const API_URL = 'https://open.er-api.com/v6/latest/USD';
+            // Usamos 't=' para evitar caché y forzar datos nuevos
+            const API_URL = `https://open.er-api.com/v6/latest/USD?t=${Date.now()}`;
             
-            // CALIBRACIÓN DE TASAS (ACTUALIZADA)
-            // Objetivo: Banreservas ~63.90, Popular ~64.10
-            // Asumiendo que la API devuelve ~61.5 (tasa mercado)
-            // Reducimos el spread para evitar el salto a 67.xx
+            // --- AJUSTE MATEMÁTICO DE TASAS ---
+            // Tasa Base API: ~60.80
+            // Meta Usuario (Banreservas/Popular): ~64.05 (Venta)
+            // Spread Calculado: 64.05 / 60.80 = 1.0534
             const BANK_SPREADS = {
-                [Bank.POPULAR]: 1.042,  
-                [Bank.RESERVAS]: 1.038, // Ajuste más conservador para acercarse a 63.90
+                [Bank.POPULAR]: 1.055,  // Ajuste para ~64.10 (Ligeramente mayor)
+                [Bank.RESERVAS]: 1.053, // Ajuste EXACTO para ~64.05
             };
 
             const CURRENCY_META = {
@@ -219,23 +220,31 @@
 
             const [activeCurrency, setActiveCurrency] = useState(CurrencyCode.USD);
             const [inputValue, setInputValue] = useState('1');
-            const [selectedBank, setSelectedBank] = useState(Bank.RESERVAS);
+            const [selectedBank, setSelectedBank] = useState(Bank.POPULAR);
             const [rates, setRates] = useState(null);
+            const [lastUpdated, setLastUpdated] = useState('');
             
             useEffect(() => {
                 const fetchRates = async () => {
                     try {
                         const res = await fetch(API_URL);
                         const data = await res.json();
-                        if(data.result === 'success') setRates(data.rates);
+                        if(data.result === 'success') {
+                            setRates(data.rates);
+                            setLastUpdated(new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                        }
                     } catch(e) { console.error("Error fetching rates", e); }
                 };
                 fetchRates();
+                // Actualizar cada 60 segundos si la app sigue abierta
+                const interval = setInterval(fetchRates, 60000);
+                return () => clearInterval(interval);
             }, []);
 
             const getRate = (code) => {
                 if (!rates) return 1;
                 let rate = rates[code];
+                // Aplicamos el spread bancario solo si convertimos A Pesos o DESDE Pesos
                 if (code === CurrencyCode.DOP) {
                     const spread = BANK_SPREADS[selectedBank] || 1.0;
                     rate = rate * spread;
@@ -302,10 +311,13 @@
                                     <ChevronDown size={14} />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 bg-[#2c2c2c] px-3 py-1.5 rounded text-xs sm:text-sm shadow-sm border border-white/5">
-                                <ArrowRightLeft size={14} className="text-win-accent" />
-                                <span className="text-win-text-muted">Tasa Venta:</span>
-                                <span className="font-bold text-white">1 USD ≈ {usdToDopRate} DOP</span>
+                            <div className="flex flex-col items-end">
+                                <div className="flex items-center gap-2 bg-[#2c2c2c] px-3 py-1.5 rounded text-xs sm:text-sm shadow-sm border border-white/5">
+                                    <ArrowRightLeft size={14} className="text-win-accent" />
+                                    <span className="text-win-text-muted">Tasa Venta:</span>
+                                    <span className="font-bold text-white">1 USD ≈ {usdToDopRate} DOP</span>
+                                </div>
+                                {lastUpdated && <span className="text-[10px] text-gray-500 mt-1 mr-1">Actualizado: {lastUpdated}</span>}
                             </div>
                         </div>
                     </div>
